@@ -11,6 +11,11 @@ from flask import flash, redirect, render_template, send_from_directory, url_for
 
 from social_insecurity import sqlite
 from social_insecurity.forms import CommentsForm, FriendsForm, IndexForm, PostForm, ProfileForm
+from werkzeug.security import generate_password_hash, check_password_hash
+
+import sqlite3
+from sqlite3 import Error
+
 
 
 @app.route("/", methods=["GET", "POST"])
@@ -29,23 +34,31 @@ def index():
 
     if login_form.is_submitted() and login_form.submit.data:
         get_user = f"""
-            SELECT *
-            FROM Users
-            WHERE username = '{login_form.username.data}';
-            """
+             SELECT *
+             FROM Users
+             WHERE username = '{login_form.username.data}';
+             """
         user = sqlite.query(get_user, one=True)
+        password = user["password"]
 
-        if user is None:
-            flash("Sorry, this user does not exist!", category="warning")
-        elif user["password"] != login_form.password.data:
-            flash("Sorry, wrong password!", category="warning")
-        elif user["password"] == login_form.password.data:
+        
+        checking_password = login_form.password.data
+
+
+        if check_password_hash(password, checking_password):
             return redirect(url_for("stream", username=login_form.username.data))
+        else:
+            flash("Wrong password or username", "warning")
+
 
     elif register_form.is_submitted() and register_form.submit.data:
+
+        new_password = register_form.password.data
+        password_hash = generate_password_hash(new_password)
+
         insert_user = f"""
             INSERT INTO Users (username, first_name, last_name, password)
-            VALUES ('{register_form.username.data}', '{register_form.first_name.data}', '{register_form.last_name.data}', '{register_form.password.data}');
+            VALUES ('{register_form.username.data}', '{register_form.first_name.data}', '{register_form.last_name.data}', '{password_hash}');
             """
         sqlite.query(insert_user)
         flash("User successfully created!", category="success")
@@ -228,3 +241,14 @@ def profile(username: str):
 def uploads(filename):
     """Provides an endpoint for serving uploaded files."""
     return send_from_directory(Path(app.instance_path) / app.config["UPLOADS_FOLDER_PATH"], filename)
+
+
+def create_connection(db_file):
+    connection = None
+    try:
+        connection = sqlite3.connect(db_file)
+        return connection
+    except Error as e:
+        print(e)
+
+    return connection
