@@ -4,6 +4,7 @@ This file contains the routes for the application. It is imported by the social_
 It also contains the SQL queries used for communicating with the database.
 """
 
+import re
 from pathlib import Path
 
 from flask import current_app as app
@@ -72,8 +73,16 @@ def stream(username: str):
 
     if post_form.is_submitted():
         if post_form.image.data:
-            path = Path(app.instance_path) / app.config["UPLOADS_FOLDER_PATH"] / post_form.image.data.filename
-            post_form.image.data.save(path)
+            pattern = r'[^a-zA-Z0-9]'
+            img_check = str(post_form.image.data.filename).split(".")
+            valid_check = ["jpg","jpeg","gif","png"]
+            # if no special chars, 2 elements split by "." and correct format:
+            if not bool(re.search(pattern, post_form.image.data.filename)) and len(img_check) == 2 and img_check[-1].lower in valid_check:
+                path = Path(app.instance_path) / app.config["UPLOADS_FOLDER_PATH"] / post_form.image.data.filename
+                post_form.image.data.save(path)
+            else:
+                #alert at filformat ikke er gyldig
+                flash("Couldnt upload file! Make sure there is no special characters!", category="error")
 
         insert_post = f"""
             INSERT INTO Posts (u_id, content, image, creation_time)
