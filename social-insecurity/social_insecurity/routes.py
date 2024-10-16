@@ -72,6 +72,11 @@ def index():
              WHERE username = '{login_form.username.data}';
              """
         user = sqlite.query(get_user, one=True)
+
+        if user is None: # Check that user exists, before checking password
+            flash("Wrong password or username", "warning")
+            return render_template("index.html.j2", title="Welcome", form=index_form)
+
         password = user["password"]
 
         
