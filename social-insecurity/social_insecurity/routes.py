@@ -60,7 +60,7 @@ def index():
         reg_first_name = register_form.first_name.data
         reg_last_name = register_form.last_name.data
         reg_password = register_form.password.data
-        if not reg_username.isalnum() or not reg_first_name.isalnum() or not reg_last_name.isalnum() or not reg_password.isalnum():   # Method to check if alphanumberical, to prevent SQLI
+        if not reg_username.isalnum() or not reg_first_name.isalnum() or not reg_last_name.isalnum():   # Method to check if alphanumberical, to prevent SQLI
             flash("Only alphanumeric characters are allowed", category="warning")
             return render_template("index.html.j2", title="Welcome", form=index_form)
 
