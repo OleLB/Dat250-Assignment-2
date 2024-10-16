@@ -80,16 +80,17 @@ def stream(username: str):
             if not bool(re.search(pattern, post_form.image.data.filename)) and len(img_check) == 2 and img_check[-1].lower in valid_check:
                 path = Path(app.instance_path) / app.config["UPLOADS_FOLDER_PATH"] / post_form.image.data.filename
                 post_form.image.data.save(path)
+                insert_post = f"""
+                INSERT INTO Posts (u_id, content, image, creation_time)
+                VALUES ({user["id"]}, '{post_form.content.data}', '{post_form.image.data.filename}', CURRENT_TIMESTAMP);
+                """
+                sqlite.query(insert_post)
+                return redirect(url_for("stream", username=username))
             else:
                 #alert at filformat ikke er gyldig
                 flash("Couldnt upload file! Make sure there is no special characters!", category="error")
 
-        insert_post = f"""
-            INSERT INTO Posts (u_id, content, image, creation_time)
-            VALUES ({user["id"]}, '{post_form.content.data}', '{post_form.image.data.filename}', CURRENT_TIMESTAMP);
-            """
-        sqlite.query(insert_post)
-        return redirect(url_for("stream", username=username))
+        
 
     get_posts = f"""
          SELECT p.*, u.*, (SELECT COUNT(*) FROM Comments WHERE p_id = p.id) AS cc
