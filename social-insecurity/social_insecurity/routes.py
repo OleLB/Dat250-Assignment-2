@@ -16,7 +16,22 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import sqlite3
 from sqlite3 import Error
 
-
+def verify_username(username):
+    # input validation, only allow alphanumeric characters
+    if not username.isalnum():
+        return False
+    
+    # Check if the user exists
+    get_user = f"""
+        SELECT *
+        FROM Users
+        WHERE username = '{username}';
+        """
+    user = sqlite.query(get_user, one=True)
+    if user is None:
+        return False
+    
+    return True
 
 @app.route("/", methods=["GET", "POST"])
 @app.route("/index", methods=["GET", "POST"])
@@ -94,13 +109,10 @@ def stream(username: str):
     Otherwise, it reads the username from the URL and displays all posts from the user and their friends.
     """
 
-
-    # input validation, only allow alphanumeric characters
-    if post_form.is_submitted():
-        if not username.isalnum():
-            flash("Only alphanumeric characters are allowed", category="warning")
-            return render_template("stream.html.j2", title="Stream", username=username, form=post_form, posts=posts)
-
+    
+    # Check if the username is alphanumerical and exists
+    if not verify_username(username):
+        return render_template("index.html.j2", title="Welcome", form=IndexForm())
 
     post_form = PostForm()
     get_user = f"""
@@ -148,6 +160,12 @@ def comments(username: str, post_id: int):
 
     Otherwise, it reads the username and post id from the URL and displays all comments for the post.
     """
+
+    # Check if the username is alphanumerical and exists
+    if not verify_username(username):
+        return render_template("index.html.j2", title="Welcome", form=IndexForm())
+    
+
     comments_form = CommentsForm()
     get_user = f"""
         SELECT *
@@ -189,6 +207,12 @@ def friends(username: str):
 
     Otherwise, it reads the username from the URL and displays all friends of the user.
     """
+
+    # Check if the username is alphanumerical and exists
+    if not verify_username(username):
+        return render_template("index.html.j2", title="Welcome", form=IndexForm())
+    
+
     friends_form = FriendsForm()
     get_user = f"""
         SELECT *
@@ -242,6 +266,12 @@ def profile(username: str):
 
     Otherwise, it reads the username from the URL and displays the user's profile.
     """
+
+    # Check if the username is alphanumerical and exists
+    if not verify_username(username):
+        return render_template("index.html.j2", title="Welcome", form=IndexForm())
+    
+
     profile_form = ProfileForm()
     get_user = f"""
         SELECT *
