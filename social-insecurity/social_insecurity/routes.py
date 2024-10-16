@@ -27,6 +27,24 @@ def index():
     login_form = index_form.login
     register_form = index_form.register
 
+    # input validation, only allow alphanumeric characters
+    if login_form.is_submitted() and login_form.submit.data:
+        username_input = login_form.username.data
+        password_input = login_form.password.data
+        if not username_input.isalnum() or not password_input.isalnum():   # Method to check if alphanumberical, to prevent SQLI
+            flash("Only alphanumeric characters are allowed", category="warning")
+            return render_template("index.html.j2", title="Welcome", form=index_form)
+
+    if register_form.is_submitted() and register_form.submit.data:
+        reg_username = register_form.username.data
+        reg_first_name = register_form.first_name.data
+        reg_last_name = register_form.last_name.data
+        reg_password = register_form.password.data
+        if not reg_username.isalnum() or not reg_first_name.isalnum() or not reg_last_name.isalnum() or not reg_password.isalnum():   # Method to check if alphanumberical, to prevent SQLI
+            flash("Only alphanumeric characters are allowed", category="warning")
+            return render_template("index.html.j2", title="Welcome", form=index_form)
+
+
     if login_form.is_submitted() and login_form.submit.data:
         get_user = f"""
             SELECT *
@@ -62,6 +80,15 @@ def stream(username: str):
 
     Otherwise, it reads the username from the URL and displays all posts from the user and their friends.
     """
+
+
+    # input validation, only allow alphanumeric characters
+    if post_form.is_submitted():
+        if not username.isalnum():
+            flash("Only alphanumeric characters are allowed", category="warning")
+            return render_template("stream.html.j2", title="Stream", username=username, form=post_form, posts=posts)
+
+
     post_form = PostForm()
     get_user = f"""
         SELECT *
