@@ -13,9 +13,16 @@
 - [ ] **IDOR:** Description of the task
     - [ ] Sub-task 1
     - [ ] Sub-task 2
-- [ ] **Other:** Description of the task
+- [ ] **File Uploads:** Description of the task
     - [ ] Implement password policy
     - [ ] Hash password
+- [ ] **User Policy:** Description of the task
+    - [ ] Implement password policy
+    - [ ] Hash password
+    - [ ] Duplicate Usernames
+    - [ ] Captcha???
+    - [ ] Change the error message to be the same on both password and username error.
+    - [ ] Make sure the password and repeat password fields match in front and back end
 
 
 ### 🎯 Priorities
