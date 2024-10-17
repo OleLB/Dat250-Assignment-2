@@ -19,7 +19,7 @@ from flask_wtf.csrf import CSRFProtect
 sqlite = SQLite3()
 # TODO: Handle login management better, maybe with flask_login?
 # login = LoginManager()
-
+csrf = CSRFProtect()
 
 
 def create_app(test_config=None) -> Flask:
@@ -28,9 +28,6 @@ def create_app(test_config=None) -> Flask:
     app.config.from_object(Config)
     if test_config:
         app.config.from_object(test_config)
-
-    # TODO: The CSRF protection is not working, I should probably fix that
-    csrf = CSRFProtect(app)
 
     sqlite.init_app(app, schema="schema.sql")
     # login.init_app(app)

@@ -20,7 +20,8 @@ from sqlite3 import Error
 
 def verify_username(username):
     # input validation, only allow alphanumeric characters
-    if not username.isalnum():
+    pattern = r'[^a-zA-Z0-9_]' # only allow alphanumeric characters and underscore
+    if bool(re.search(pattern, username)):
         return False
     
     # Check if the user exists
@@ -50,7 +51,7 @@ def generate_nonce():
 @app.after_request
 def set_csp(response):
     if response.content_type == 'text/html':
-        print("Setting CSP", g.nonce)
+        # print("Setting CSP", g.nonce)
         csp = (
             "default-src 'self' https://maxcdn.bootstrapcdn.com;"
             "script-src 'self' https://cdn.jsdelivr.net 'nonce-{g.nonce}';"
@@ -384,7 +385,7 @@ def profile(username: str):
             """
         sqlite.query(update_profile)
         return redirect(url_for("profile", username=username))
-    print("setting html nonce: ", g.nonce)
+    # print("setting html nonce: ", g.nonce)
     return render_template("profile.html.j2", title="Profile", username=username, user=user, form=profile_form, nonce=g.nonce)
 
 
