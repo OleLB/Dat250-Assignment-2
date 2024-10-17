@@ -83,6 +83,7 @@ def index():
     if login_form.is_submitted() and login_form.submit.data:
         username_input = login_form.username.data
         password_input = login_form.password.data
+        
         if not username_input.isalnum():   # Method to check if alphanumberical, to prevent SQLI
             flash("Only alphanumeric characters are allowed", category="warning")
             return render_template("index.html.j2", title="Welcome", form=index_form)
@@ -92,8 +93,27 @@ def index():
         reg_first_name = register_form.first_name.data
         reg_last_name = register_form.last_name.data
         reg_password = register_form.password.data
+        confirm_password_input = register_form.confirm_password.data
+
+        # make sure passwords match
+        if confirm_password_input != reg_password:
+            flash("Passwords do not match", category="warning")
+            return render_template("index.html.j2", title="Welcome", form=index_form)
+        
+        # input validation, only allow alphanumeric characters
         if not reg_username.isalnum() or not reg_first_name.isalnum() or not reg_last_name.isalnum():   # Method to check if alphanumberical, to prevent SQLI
             flash("Only alphanumeric characters are allowed", category="warning")
+            return render_template("index.html.j2", title="Welcome", form=index_form)
+        
+        # check if username already exists
+        check_username = f"""
+             SELECT *
+             FROM Users
+             WHERE username = '{reg_username}';
+             """
+        user = sqlite.query(check_username, one=True)
+        if user is not None:
+            flash("Username already exists", category="warning")
             return render_template("index.html.j2", title="Welcome", form=index_form)
 
 
