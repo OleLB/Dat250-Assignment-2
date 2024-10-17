@@ -113,7 +113,7 @@ def index():
              """
         user = sqlite.query(check_username, one=True)
         if user is not None:
-            flash("Username already exists", category="warning")
+            flash("Username not available", category="warning")
             return render_template("index.html.j2", title="Welcome", form=index_form)
 
 
