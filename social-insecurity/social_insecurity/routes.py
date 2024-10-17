@@ -4,10 +4,12 @@ This file contains the routes for the application. It is imported by the social_
 It also contains the SQL queries used for communicating with the database.
 """
 import re
+import base64
+import os
 from pathlib import Path
 
 from flask import current_app as app
-from flask import flash, redirect, render_template, send_from_directory, url_for
+from flask import flash, redirect, render_template, send_from_directory, url_for, g
 
 from social_insecurity import sqlite
 from social_insecurity.forms import CommentsForm, FriendsForm, IndexForm, PostForm, ProfileForm
@@ -41,13 +43,26 @@ def xss_and_sqli_cehck(input):
         return False
     return True
 
+def generate_nonce():
+    return base64.b64encode(os.urandom(16)).decode('utf-8')
 
 # csp rules (Content Security Policy)
-# @app.after_request
-# def set_csp(response):
-#     csp = "default-src 'self'; script-src 'self'; style-src 'self';"
-#     response.headers['Content-Security-Policy'] = csp
-#     return response
+@app.after_request
+def set_csp(response):
+    if response.content_type == 'text/html':
+        print("Setting CSP", g.nonce)
+        csp = (
+            "default-src 'self' https://maxcdn.bootstrapcdn.com;"
+            "script-src 'self' https://cdn.jsdelivr.net 'nonce-{g.nonce}';"
+            "style-src 'self' https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css 'nonce-{g.nonce}';"
+        )
+        response.headers['Content-Security-Policy'] = csp
+    return response
+
+@app.before_request
+def before_request():
+    g.nonce = generate_nonce()  # Generate nonce before each request
+
 
 @app.route("/", methods=["GET", "POST"])
 @app.route("/index", methods=["GET", "POST"])
@@ -369,8 +384,8 @@ def profile(username: str):
             """
         sqlite.query(update_profile)
         return redirect(url_for("profile", username=username))
-
-    return render_template("profile.html.j2", title="Profile", username=username, user=user, form=profile_form)
+    print("setting html nonce: ", g.nonce)
+    return render_template("profile.html.j2", title="Profile", username=username, user=user, form=profile_form, nonce=g.nonce)
 
 
 @app.route("/uploads/<string:filename>")

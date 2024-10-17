@@ -78,7 +78,7 @@
   </div>
 {% endblock content %}
 {% block script %}
-  <script>
+  <script nonce="{{ nonce }}">
       function switchVisibility(elem1, elem2) {
           const viewDetails = document.querySelector(elem1);
           const editDetails = document.querySelector(elem2);
