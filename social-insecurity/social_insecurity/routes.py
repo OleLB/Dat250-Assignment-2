@@ -191,7 +191,7 @@ def stream(username: str):
                 post_form.image.data.save(path)
             else:
                 #alert at filformat ikke er gyldig
-                flash("Couldnt upload file! Make sure there is no special characters!", category="error")
+                flash("Couldnt upload file! Make sure there are no special characters!", category="error")
 
         if not xss_and_sqli_cehck(post_form.content.data):
             flash("Only alphanumeric characters and some punctuation (, . ! ? : -) is allowed ", category="warning")
