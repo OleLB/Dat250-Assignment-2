@@ -187,22 +187,22 @@ def stream(username: str):
     if post_form.is_submitted():
         if not post_form.image.data and not post_form.content.data.strip():
             #utelukker tomme posts
-            flash("Invalid post content! please check your img/text if valid", category="Error")
+            flash("Invalid post content! please check your img/text if valid", category="warning")
             return redirect(url_for("stream", username=username))
         elif post_form.image.data:
-            pattern = r'[^a-zA-Z0-9]'
+            pattern = r'[^a-zA-Z0-9]'  # patten will return true if there are any special characters
             img_check = str(post_form.image.data.filename).split(".")
             print(img_check)
             valid_check = ["jpg","jpeg","gif","png"]
 
             if img_check[-1].lower() not in valid_check or len(img_check) != 2 or bool(re.search(pattern, img_check[0])):
                 #bildet er ikke ok
-                flash("Invalid file, please restrain from using special characters, and only use .jpg, .jpeg, .png or .gif", category="Error")
+                flash("Invalid file, please restrain from using special characters, and only use .jpg, .jpeg, .png or .gif", category="warning")
                 return redirect(url_for("stream", username=username))
         
         # checks for xss
         if not xss_and_sqli_cehck(post_form.content.data): 
-            flash("Invalid text, please use valid characters", category="Error")
+            flash("Invalid text, please use valid characters", category="warning")
             return redirect(url_for("stream", username=username))
 
         #posts the content
