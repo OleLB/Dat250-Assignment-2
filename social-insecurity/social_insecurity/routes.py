@@ -9,14 +9,18 @@ import os
 from pathlib import Path
 
 from flask import current_app as app
+
 from flask import flash, redirect, render_template, send_from_directory, url_for, g
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 from social_insecurity import sqlite
 from social_insecurity.forms import CommentsForm, FriendsForm, IndexForm, PostForm, ProfileForm
 from werkzeug.security import generate_password_hash, check_password_hash
 
-import sqlite3
-from sqlite3 import Error
+
+limiter = Limiter(get_remote_address, app=app, default_limits=["1000 per day"])
+
 
 def verify_username(username):
     # input validation, only allow alphanumeric characters
@@ -67,6 +71,7 @@ def set_csp(response):
 
 @app.route("/", methods=["GET", "POST"])
 @app.route("/index", methods=["GET", "POST"])
+@limiter.limit(limit_value="10/minute")
 def index():
     """Provides the index page for the application.
 
@@ -180,30 +185,37 @@ def stream(username: str):
     user = sqlite.query(get_user, one=True)
 
     if post_form.is_submitted():
-        # img check
-        if post_form.image.data:
+        if not post_form.image.data and not post_form.content.data.strip():
+            #utelukker tomme posts
+            flash("Invalid post content! please check your img/text if valid", category="Error")
+            return redirect(url_for("stream", username=username))
+        elif post_form.image.data:
             pattern = r'[^a-zA-Z0-9]'
             img_check = str(post_form.image.data.filename).split(".")
+            print(img_check)
             valid_check = ["jpg","jpeg","gif","png"]
-            # if no special chars, 2 elements split by "." and correct format:
-            if not bool(re.search(pattern, post_form.image.data.filename)) and len(img_check) == 2 and img_check[-1].lower in valid_check:
-                path = Path(app.instance_path) / app.config["UPLOADS_FOLDER_PATH"] / post_form.image.data.filename
-                post_form.image.data.save(path)
-            else:
-                #alert at filformat ikke er gyldig
-                flash("Couldnt upload file! Make sure there is no special characters!", category="error")
 
-        if not xss_and_sqli_cehck(post_form.content.data):
-            flash("Only alphanumeric characters and some punctuation (, . ! ? : -) is allowed ", category="warning")
-            return render_template("stream.html.j2", title="Stream", username=username, form=post_form)
+            if img_check[-1].lower() not in valid_check or len(img_check) != 2 or bool(re.search(pattern, img_check[0])):
+                #bildet er ikke ok
+                flash("Invalid file, please restrain from using special characters, and only use .jpg, .jpeg, .png or .gif", category="Error")
+                return redirect(url_for("stream", username=username))
+        
+        # checks for xss
+        if not xss_and_sqli_cehck(post_form.content.data): 
+            flash("Invalid text, please use valid characters", category="Error")
+            return redirect(url_for("stream", username=username))
 
+        #posts the content
+        if post_form.image.data:
+            path = Path(app.instance_path) / app.config["UPLOADS_FOLDER_PATH"] / post_form.image.data.filename
+            post_form.image.data.save(path)
         insert_post = f"""
-            INSERT INTO Posts (u_id, content, image, creation_time)
-            VALUES ({user["id"]}, '{post_form.content.data}', '{post_form.image.data.filename}', CURRENT_TIMESTAMP);
-            """
+        INSERT INTO Posts (u_id, content, image, creation_time)
+        VALUES ({user["id"]}, '{post_form.content.data}', '{post_form.image.data.filename}', CURRENT_TIMESTAMP);
+        """
         sqlite.query(insert_post)
         return redirect(url_for("stream", username=username))
-
+    
     get_posts = f"""
          SELECT p.*, u.*, (SELECT COUNT(*) FROM Comments WHERE p_id = p.id) AS cc
          FROM Posts AS p JOIN Users AS u ON u.id = p.u_id
@@ -280,6 +292,7 @@ def comments(username: str, post_id: int):
     )
 
 
+
 @app.route("/friends/<string:username>", methods=["GET", "POST"])
 def friends(username: str):
     """Provides the friends page for the application.
@@ -341,6 +354,7 @@ def friends(username: str):
         """
     friends = sqlite.query(get_friends)
     return render_template("friends.html.j2", title="Friends", username=username, friends=friends, form=friends_form)
+
 
 
 @app.route("/profile/<string:username>", methods=["GET", "POST"])
@@ -415,14 +429,3 @@ def profile(username: str):
 def uploads(filename):
     """Provides an endpoint for serving uploaded files."""
     return send_from_directory(Path(app.instance_path) / app.config["UPLOADS_FOLDER_PATH"], filename)
-
-
-def create_connection(db_file):
-    connection = None
-    try:
-        connection = sqlite3.connect(db_file)
-        return connection
-    except Error as e:
-        print(e)
-
-    return connection
