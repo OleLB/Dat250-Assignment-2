@@ -180,7 +180,6 @@ def stream(username: str):
     user = sqlite.query(get_user, one=True)
 
     if post_form.is_submitted():
-        # img check
         if post_form.image.data:
             pattern = r'[^a-zA-Z0-9]'
             img_check = str(post_form.image.data.filename).split(".")
@@ -189,20 +188,15 @@ def stream(username: str):
             if not bool(re.search(pattern, post_form.image.data.filename)) and len(img_check) == 2 and img_check[-1].lower in valid_check:
                 path = Path(app.instance_path) / app.config["UPLOADS_FOLDER_PATH"] / post_form.image.data.filename
                 post_form.image.data.save(path)
+                insert_post = f"""
+                INSERT INTO Posts (u_id, content, image, creation_time)
+                VALUES ({user["id"]}, '{post_form.content.data}', '{post_form.image.data.filename}', CURRENT_TIMESTAMP);
+                """
+                sqlite.query(insert_post)
+                return redirect(url_for("stream", username=username))
             else:
                 #alert at filformat ikke er gyldig
-                flash("Couldnt upload file! Make sure there are no special characters!", category="error")
-
-        if not xss_and_sqli_cehck(post_form.content.data):
-            flash("Only alphanumeric characters and some punctuation (, . ! ? : -) is allowed ", category="warning")
-            return render_template("stream.html.j2", title="Stream", username=username, form=post_form)
-
-        insert_post = f"""
-            INSERT INTO Posts (u_id, content, image, creation_time)
-            VALUES ({user["id"]}, '{post_form.content.data}', '{post_form.image.data.filename}', CURRENT_TIMESTAMP);
-            """
-        sqlite.query(insert_post)
-        return redirect(url_for("stream", username=username))
+                flash("Couldnt upload file! Make sure there is no special characters!", category="error")
 
     get_posts = f"""
          SELECT p.*, u.*, (SELECT COUNT(*) FROM Comments WHERE p_id = p.id) AS cc
