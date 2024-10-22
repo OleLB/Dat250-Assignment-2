@@ -180,24 +180,7 @@ def stream(username: str):
     user = sqlite.query(get_user, one=True)
 
     if post_form.is_submitted():
-        if post_form.image.data:
-            pattern = r'[^a-zA-Z0-9]'
-            img_check = str(post_form.image.data.filename).split(".")
-            valid_check = ["jpg","jpeg","gif","png"]
-            # if no special chars, 2 elements split by "." and correct format:
-            if not bool(re.search(pattern, post_form.image.data.filename)) and len(img_check) == 2 and img_check[-1].lower in valid_check:
-                path = Path(app.instance_path) / app.config["UPLOADS_FOLDER_PATH"] / post_form.image.data.filename
-                post_form.image.data.save(path)
-                insert_post = f"""
-                INSERT INTO Posts (u_id, content, image, creation_time)
-                VALUES ({user["id"]}, '{post_form.content.data}', '{post_form.image.data.filename}', CURRENT_TIMESTAMP);
-                """
-                sqlite.query(insert_post)
-                return redirect(url_for("stream", username=username))
-            else:
-                #alert at filformat ikke er gyldig
-                flash("Couldnt upload file! Make sure there are no special characters!", category="Error")
-        else:
+        if not post_form.image.data:
             # No file uploaded, add post with text only if content is provided
             if post_form.content.data.strip():  # Ensure the content is not empty or just whitespace
                 insert_post = f"""
@@ -208,6 +191,29 @@ def stream(username: str):
                 return redirect(url_for("stream", username=username))
             else:
                 flash("Post content cannot be empty!", category="Error")
+        else:
+            pattern = r'[^a-zA-Z0-9]'
+            img_check = str(post_form.image.data.filename).split(".")
+            print(img_check)
+            valid_check = ["jpg","jpeg","gif","png"]
+            # if no special chars, 2 elements split by "." and correct format:
+            if img_check[-1].lower in valid_check:  #xxx
+                print(1)
+                if len(img_check) == 2: # xxx
+                    print("2")
+                    if not bool(re.search(pattern, post_form.image.data.filename)): #xxx
+                        print("3")
+                        path = Path(app.instance_path) / app.config["UPLOADS_FOLDER_PATH"] / post_form.image.data.filename
+                        post_form.image.data.save(path)
+                        insert_post = f"""
+                        INSERT INTO Posts (u_id, content, image, creation_time)
+                        VALUES ({user["id"]}, '{post_form.content.data}', '{post_form.image.data.filename}', CURRENT_TIMESTAMP);
+                        """
+                        sqlite.query(insert_post)
+                        return redirect(url_for("stream", username=username))
+            else:
+                #alert at filformat ikke er gyldig
+                flash("Couldnt upload file! Make sure there are no special characters!", category="Error")
                 
     get_posts = f"""
          SELECT p.*, u.*, (SELECT COUNT(*) FROM Comments WHERE p_id = p.id) AS cc
