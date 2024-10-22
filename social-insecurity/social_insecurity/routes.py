@@ -197,7 +197,18 @@ def stream(username: str):
             else:
                 #alert at filformat ikke er gyldig
                 flash("Couldnt upload file! Make sure there are no special characters!", category="Error")
-
+        else:
+            # No file uploaded, add post with text only if content is provided
+            if post_form.content.data.strip():  # Ensure the content is not empty or just whitespace
+                insert_post = f"""
+                INSERT INTO Posts (u_id, content, creation_time)
+                VALUES ({user["id"]}, '{post_form.content.data}', CURRENT_TIMESTAMP);
+                """
+                sqlite.query(insert_post)
+                return redirect(url_for("stream", username=username))
+            else:
+                flash("Post content cannot be empty!", category="Error")
+                
     get_posts = f"""
          SELECT p.*, u.*, (SELECT COUNT(*) FROM Comments WHERE p_id = p.id) AS cc
          FROM Posts AS p JOIN Users AS u ON u.id = p.u_id
@@ -274,6 +285,7 @@ def comments(username: str, post_id: int):
     )
 
 
+
 @app.route("/friends/<string:username>", methods=["GET", "POST"])
 def friends(username: str):
     """Provides the friends page for the application.
@@ -335,6 +347,7 @@ def friends(username: str):
         """
     friends = sqlite.query(get_friends)
     return render_template("friends.html.j2", title="Friends", username=username, friends=friends, form=friends_form)
+
 
 
 @app.route("/profile/<string:username>", methods=["GET", "POST"])
