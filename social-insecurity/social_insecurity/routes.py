@@ -196,7 +196,7 @@ def stream(username: str):
                 return redirect(url_for("stream", username=username))
             else:
                 #alert at filformat ikke er gyldig
-                flash("Couldnt upload file! Make sure there is no special characters!", category="error")
+                flash("Couldnt upload file! Make sure there are no special characters!", category="Error")
 
     get_posts = f"""
          SELECT p.*, u.*, (SELECT COUNT(*) FROM Comments WHERE p_id = p.id) AS cc
