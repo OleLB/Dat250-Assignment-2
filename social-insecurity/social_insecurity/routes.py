@@ -9,14 +9,18 @@ import os
 from pathlib import Path
 
 from flask import current_app as app
+
 from flask import flash, redirect, render_template, send_from_directory, url_for, g
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 from social_insecurity import sqlite
 from social_insecurity.forms import CommentsForm, FriendsForm, IndexForm, PostForm, ProfileForm
 from werkzeug.security import generate_password_hash, check_password_hash
 
-import sqlite3
-from sqlite3 import Error
+
+limiter = Limiter(get_remote_address, app=app, default_limits=["1000 per day"])
+
 
 def verify_username(username):
     # input validation, only allow alphanumeric characters
@@ -67,6 +71,7 @@ def before_request():
 
 @app.route("/", methods=["GET", "POST"])
 @app.route("/index", methods=["GET", "POST"])
+@limiter.limit(limit_value="10/minute")
 def index():
     """Provides the index page for the application.
 
@@ -422,14 +427,3 @@ def profile(username: str):
 def uploads(filename):
     """Provides an endpoint for serving uploaded files."""
     return send_from_directory(Path(app.instance_path) / app.config["UPLOADS_FOLDER_PATH"], filename)
-
-
-def create_connection(db_file):
-    connection = None
-    try:
-        connection = sqlite3.connect(db_file)
-        return connection
-    except Error as e:
-        print(e)
-
-    return connection
