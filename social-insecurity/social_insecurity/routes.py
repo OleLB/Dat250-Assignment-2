@@ -50,19 +50,19 @@ def generate_nonce():
 # csp rules (Content Security Policy)
 @app.after_request
 def set_csp(response):
-    if response.content_type == 'text/html':
-        # print("Setting CSP", g.nonce)
-        csp = (
-            "default-src 'self' https://maxcdn.bootstrapcdn.com;"
-            "script-src 'self' https://cdn.jsdelivr.net 'nonce-{g.nonce}';"
-            "style-src 'self' https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css 'nonce-{g.nonce}';"
-        )
-        response.headers['Content-Security-Policy'] = csp
-    return response
+    # if g.nonce does not exist, create it
+    if not hasattr(g, 'nonce'):
+        g.nonce = generate_nonce()
 
-@app.before_request
-def before_request():
-    g.nonce = generate_nonce()  # Generate nonce before each request
+    csp = (
+        #"default-src 'self' https://maxcdn.bootstrapcdn.com;"
+        #f"script-src 'self' https://cdn.jsdelivr.net 'nonce-{g.nonce}';"
+        #"style-src 'self' https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css;"
+        "frame-ancestors 'none';"
+    )
+
+    response.headers['Content-Security-Policy'] = csp
+    return response
 
 
 @app.route("/", methods=["GET", "POST"])
@@ -406,6 +406,8 @@ def profile(username: str):
         sqlite.query(update_profile)
         return redirect(url_for("profile", username=username))
     # print("setting html nonce: ", g.nonce)
+    g.nonce = generate_nonce()
+    print("nonce in template: ", g.nonce)
     return render_template("profile.html.j2", title="Profile", username=username, user=user, form=profile_form, nonce=g.nonce)
 
 
