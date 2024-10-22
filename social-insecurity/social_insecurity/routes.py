@@ -3,7 +3,9 @@
 This file contains the routes for the application. It is imported by the social_insecurity package.
 It also contains the SQL queries used for communicating with the database.
 """
-
+import re
+import base64
+import os
 from pathlib import Path
 
 from flask import current_app as app
@@ -12,13 +14,59 @@ from flask import flash, redirect, render_template, send_from_directory, url_for
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
-
 from social_insecurity import sqlite
 from social_insecurity.forms import CommentsForm, FriendsForm, IndexForm, PostForm, ProfileForm
 from werkzeug.security import generate_password_hash, check_password_hash
 
 
 limiter = Limiter(get_remote_address, app=app, default_limits=["1000 per day"])
+
+
+def verify_username(username):
+    # input validation, only allow alphanumeric characters
+    pattern = r'[^a-zA-Z0-9_]' # only allow alphanumeric characters and underscore
+    if bool(re.search(pattern, username)):
+        return False
+    
+    # Check if the user exists
+    get_user = f"""
+        SELECT *
+        FROM Users
+        WHERE username = '{username}';
+        """
+    user = sqlite.query(get_user, one=True)
+    if user is None:
+        return False
+    
+    return True
+
+
+def xss_and_sqli_cehck(input):
+    # content check, sanitize to prevent XSS and SQLI
+    patter = r'[^a-zA-Z0-9\s\.\,\!\?\:\-]' # only allow alphanumeric, whitespace, . , ! ? : -
+    if bool(re.search(patter, input)):
+        return False
+    return True
+
+def generate_nonce():
+    return base64.b64encode(os.urandom(16)).decode('utf-8')
+
+# csp rules (Content Security Policy)
+@app.after_request
+def set_csp(response):
+    if response.content_type == 'text/html':
+        # print("Setting CSP", g.nonce)
+        csp = (
+            "default-src 'self' https://maxcdn.bootstrapcdn.com;"
+            "script-src 'self' https://cdn.jsdelivr.net 'nonce-{g.nonce}';"
+            "style-src 'self' https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css 'nonce-{g.nonce}';"
+        )
+        response.headers['Content-Security-Policy'] = csp
+    return response
+
+@app.before_request
+def before_request():
+    g.nonce = generate_nonce()  # Generate nonce before each request
 
 
 @app.route("/", methods=["GET", "POST"])
@@ -36,6 +84,44 @@ def index():
     login_form = index_form.login
     register_form = index_form.register
 
+    # input validation, only allow alphanumeric characters
+    if login_form.is_submitted() and login_form.submit.data:
+        username_input = login_form.username.data
+        password_input = login_form.password.data
+        
+        if not username_input.isalnum():   # Method to check if alphanumberical, to prevent SQLI
+            flash("Only alphanumeric characters are allowed", category="warning")
+            return render_template("index.html.j2", title="Welcome", form=index_form)
+
+    if register_form.is_submitted() and register_form.submit.data:
+        reg_username = register_form.username.data
+        reg_first_name = register_form.first_name.data
+        reg_last_name = register_form.last_name.data
+        reg_password = register_form.password.data
+        confirm_password_input = register_form.confirm_password.data
+
+        # make sure passwords match
+        if confirm_password_input != reg_password:
+            flash("Passwords do not match", category="warning")
+            return render_template("index.html.j2", title="Welcome", form=index_form)
+        
+        # input validation, only allow alphanumeric characters
+        if not reg_username.isalnum() or not reg_first_name.isalnum() or not reg_last_name.isalnum():   # Method to check if alphanumberical, to prevent SQLI
+            flash("Only alphanumeric characters are allowed", category="warning")
+            return render_template("index.html.j2", title="Welcome", form=index_form)
+        
+        # check if username already exists
+        check_username = f"""
+             SELECT *
+             FROM Users
+             WHERE username = '{reg_username}';
+             """
+        user = sqlite.query(check_username, one=True)
+        if user is not None:
+            flash("Username not available", category="warning")
+            return render_template("index.html.j2", title="Welcome", form=index_form)
+
+
     if login_form.is_submitted() and login_form.submit.data:
         get_user = f"""
              SELECT *
@@ -43,6 +129,11 @@ def index():
              WHERE username = '{login_form.username.data}';
              """
         user = sqlite.query(get_user, one=True)
+
+        if user is None: # Check that user exists, before checking password
+            flash("Wrong password or username", "warning")
+            return render_template("index.html.j2", title="Welcome", form=index_form)
+
         password = user["password"]
 
         
@@ -79,6 +170,12 @@ def stream(username: str):
 
     Otherwise, it reads the username from the URL and displays all posts from the user and their friends.
     """
+
+    
+    # Check if the username is alphanumerical and exists
+    if not verify_username(username):
+        return render_template("index.html.j2", title="Welcome", form=IndexForm())
+
     post_form = PostForm()
     get_user = f"""
         SELECT *
@@ -88,17 +185,41 @@ def stream(username: str):
     user = sqlite.query(get_user, one=True)
 
     if post_form.is_submitted():
-        if post_form.image.data:
-            path = Path(app.instance_path) / app.config["UPLOADS_FOLDER_PATH"] / post_form.image.data.filename
-            post_form.image.data.save(path)
-
-        insert_post = f"""
-            INSERT INTO Posts (u_id, content, image, creation_time)
-            VALUES ({user["id"]}, '{post_form.content.data}', '{post_form.image.data.filename}', CURRENT_TIMESTAMP);
-            """
-        sqlite.query(insert_post)
-        return redirect(url_for("stream", username=username))
-
+        if not post_form.image.data:
+            # No file uploaded, add post with text only if content is provided
+            if post_form.content.data.strip():  # Ensure the content is not empty or just whitespace
+                insert_post = f"""
+                INSERT INTO Posts (u_id, content, creation_time)
+                VALUES ({user["id"]}, '{post_form.content.data}', CURRENT_TIMESTAMP);
+                """
+                sqlite.query(insert_post)
+                return redirect(url_for("stream", username=username))
+            else:
+                flash("Post content cannot be empty!", category="Error")
+        else:
+            pattern = r'[^a-zA-Z0-9]'
+            img_check = str(post_form.image.data.filename).split(".")
+            print(img_check)
+            valid_check = ["jpg","jpeg","gif","png"]
+            # if no special chars, 2 elements split by "." and correct format:
+            if img_check[-1].lower in valid_check:  #xxx
+                print(1)
+                if len(img_check) == 2: # xxx
+                    print("2")
+                    if not bool(re.search(pattern, post_form.image.data.filename)): #xxx
+                        print("3")
+                        path = Path(app.instance_path) / app.config["UPLOADS_FOLDER_PATH"] / post_form.image.data.filename
+                        post_form.image.data.save(path)
+                        insert_post = f"""
+                        INSERT INTO Posts (u_id, content, image, creation_time)
+                        VALUES ({user["id"]}, '{post_form.content.data}', '{post_form.image.data.filename}', CURRENT_TIMESTAMP);
+                        """
+                        sqlite.query(insert_post)
+                        return redirect(url_for("stream", username=username))
+            else:
+                #alert at filformat ikke er gyldig
+                flash("Couldnt upload file! Make sure there are no special characters!", category="Error")
+                
     get_posts = f"""
          SELECT p.*, u.*, (SELECT COUNT(*) FROM Comments WHERE p_id = p.id) AS cc
          FROM Posts AS p JOIN Users AS u ON u.id = p.u_id
@@ -117,6 +238,38 @@ def comments(username: str, post_id: int):
 
     Otherwise, it reads the username and post id from the URL and displays all comments for the post.
     """
+
+    # Check if the username is alphanumerical and exists
+    if not verify_username(username):
+        return render_template("index.html.j2", title="Welcome", form=IndexForm())
+    
+    # check that it is an integer
+    if not isinstance(post_id, int):
+        return render_template("index.html.j2", title="Welcome", form=IndexForm())
+    # check that it is positive
+    if post_id < 0:
+        return render_template("index.html.j2", title="Welcome", form=IndexForm())
+    # check that the post exists
+    
+    get_post = f"""
+        SELECT *
+        FROM Posts AS p JOIN Users AS u ON p.u_id = u.id
+        WHERE p.id = {post_id};
+        """
+
+    get_comments = f"""
+        SELECT DISTINCT *
+        FROM Comments AS c JOIN Users AS u ON c.u_id = u.id
+        WHERE c.p_id={post_id}
+        ORDER BY c.creation_time DESC;
+        """
+    
+    post = sqlite.query(get_post, one=True)
+    if post is None:
+        return render_template("index.html.j2", title="Welcome", form=IndexForm())
+    
+    comments = sqlite.query(get_comments)
+
     comments_form = CommentsForm()
     get_user = f"""
         SELECT *
@@ -126,28 +279,22 @@ def comments(username: str, post_id: int):
     user = sqlite.query(get_user, one=True)
 
     if comments_form.is_submitted():
+
+        # input validation
+        if not xss_and_sqli_cehck(comments_form.comment.data):
+            flash("Only alphanumeric characters and some punctuation (, . ! ? : -) is allowed ", category="warning")
+            return render_template("comments.html.j2", title="Comments", username=username, form=comments_form, post=post, comments=comments)
+
         insert_comment = f"""
             INSERT INTO Comments (p_id, u_id, comment, creation_time)
             VALUES ({post_id}, {user["id"]}, '{comments_form.comment.data}', CURRENT_TIMESTAMP);
             """
         sqlite.query(insert_comment)
 
-    get_post = f"""
-        SELECT *
-        FROM Posts AS p JOIN Users AS u ON p.u_id = u.id
-        WHERE p.id = {post_id};
-        """
-    get_comments = f"""
-        SELECT DISTINCT *
-        FROM Comments AS c JOIN Users AS u ON c.u_id = u.id
-        WHERE c.p_id={post_id}
-        ORDER BY c.creation_time DESC;
-        """
-    post = sqlite.query(get_post, one=True)
-    comments = sqlite.query(get_comments)
     return render_template(
         "comments.html.j2", title="Comments", username=username, form=comments_form, post=post, comments=comments
     )
+
 
 
 @app.route("/friends/<string:username>", methods=["GET", "POST"])
@@ -158,6 +305,12 @@ def friends(username: str):
 
     Otherwise, it reads the username from the URL and displays all friends of the user.
     """
+
+    # Check if the username is alphanumerical and exists
+    if not verify_username(username):
+        return render_template("index.html.j2", title="Welcome", form=IndexForm())
+    
+
     friends_form = FriendsForm()
     get_user = f"""
         SELECT *
@@ -167,6 +320,10 @@ def friends(username: str):
     user = sqlite.query(get_user, one=True)
 
     if friends_form.is_submitted():
+        # check if alphanumerical
+        if not friends_form.username.data.isalnum():
+            flash("Only alphanumeric characters are allowed", category="warning")
+            return render_template("friends.html.j2", title="Friends", username=username, form=friends_form)
         get_friend = f"""
             SELECT *
             FROM Users
@@ -203,6 +360,7 @@ def friends(username: str):
     return render_template("friends.html.j2", title="Friends", username=username, friends=friends, form=friends_form)
 
 
+
 @app.route("/profile/<string:username>", methods=["GET", "POST"])
 def profile(username: str):
     """Provides the profile page for the application.
@@ -211,6 +369,12 @@ def profile(username: str):
 
     Otherwise, it reads the username from the URL and displays the user's profile.
     """
+
+    # Check if the username is alphanumerical and exists
+    if not verify_username(username):
+        return render_template("index.html.j2", title="Welcome", form=IndexForm())
+    
+
     profile_form = ProfileForm()
     get_user = f"""
         SELECT *
@@ -220,6 +384,36 @@ def profile(username: str):
     user = sqlite.query(get_user, one=True)
 
     if profile_form.is_submitted():
+        # profil update, input validation
+        if not xss_and_sqli_cehck(profile_form.education.data):
+            flash("Only alphanumeric characters and some punctuation (, . ! ? : -) is allowed ", category="warning")
+            return render_template("profile.html.j2", title="Profile", username=username, user=user, form=profile_form)
+        
+        if not xss_and_sqli_cehck(profile_form.employment.data):
+            flash("Only alphanumeric characters and some punctuation (, . ! ? : -) is allowed ", category="warning")
+            return render_template("profile.html.j2", title="Profile", username=username, user=user, form=profile_form)
+        
+        if not xss_and_sqli_cehck(profile_form.music.data):
+            flash("Only alphanumeric characters and some punctuation (, . ! ? : -) is allowed ", category="warning")
+            return render_template("profile.html.j2", title="Profile", username=username, user=user, form=profile_form)
+        
+        if not xss_and_sqli_cehck(profile_form.movie.data):
+            flash("Only alphanumeric characters and some punctuation (, . ! ? : -) is allowed ", category="warning")
+            return render_template("profile.html.j2", title="Profile", username=username, user=user, form=profile_form)
+        
+        if not xss_and_sqli_cehck(profile_form.nationality.data):
+            flash("Only alphanumeric characters and some punctuation (, . ! ? : -) is allowed ", category="warning")
+            return render_template("profile.html.j2", title="Profile", username=username, user=user, form=profile_form)
+        
+        # check if date is valid, to prevent SQLI and XSS
+        birthday = profile_form.birthday.data
+        try:
+            birthday = birthday.strftime("%Y-%m-%d")     
+        except:
+            flash("Invalid date format", category="warning")
+            return render_template("profile.html.j2", title="Profile", username=username, user=user, form=profile_form)
+        xss_and_sqli_cehck(birthday)
+
         update_profile = f"""
             UPDATE Users
             SET education='{profile_form.education.data}', employment='{profile_form.employment.data}',
@@ -229,8 +423,8 @@ def profile(username: str):
             """
         sqlite.query(update_profile)
         return redirect(url_for("profile", username=username))
-
-    return render_template("profile.html.j2", title="Profile", username=username, user=user, form=profile_form)
+    # print("setting html nonce: ", g.nonce)
+    return render_template("profile.html.j2", title="Profile", username=username, user=user, form=profile_form, nonce=g.nonce)
 
 
 @app.route("/uploads/<string:filename>")
