@@ -184,17 +184,16 @@ def stream(username: str):
         """
     user = sqlite.query(get_user, one=True)
 
+    # following variables is used later in another if, keep outside
+    valid_check = ["jpg","jpeg","gif","png"]
+    pattern = r'[^a-zA-Z0-9]'  # patten will return true if there are any special characters
     if post_form.is_submitted():
         if not post_form.image.data and not post_form.content.data.strip():
             #utelukker tomme posts
             flash("Invalid post content! please check your img/text if valid", category="warning")
             return redirect(url_for("stream", username=username))
         elif post_form.image.data:
-            pattern = r'[^a-zA-Z0-9]'  # patten will return true if there are any special characters
             img_check = str(post_form.image.data.filename).split(".")
-            print(img_check)
-            valid_check = ["jpg","jpeg","gif","png"]
-
             if img_check[-1].lower() not in valid_check or len(img_check) != 2 or bool(re.search(pattern, img_check[0])):
                 #bildet er ikke ok
                 flash("Invalid file, please restrain from using special characters, and only use .jpg, .jpeg, .png or .gif", category="warning")
@@ -222,7 +221,12 @@ def stream(username: str):
          WHERE p.u_id IN (SELECT u_id FROM Friends WHERE f_id = {user["id"]}) OR p.u_id IN (SELECT f_id FROM Friends WHERE u_id = {user["id"]}) OR p.u_id = {user["id"]}
          ORDER BY p.creation_time DESC;
         """
+    # TODO: legg til at hvis det finnes noe i db som ikke følger valid_check, så blir det ikke rendered, evt slettet
     posts = sqlite.query(get_posts)
+    for post in posts:
+        if post[3]:
+            if post[3].split(".")[-1].lower() not in valid_check:
+                posts.remove(post)
     return render_template("stream.html.j2", title="Stream", username=username, form=post_form, posts=posts)
 
 
