@@ -2,3 +2,10 @@ body {
     padding-top: 70px;
     padding-bottom: 20px;
 }
+
+.hidden {
+    display: none;
+}
+.visible {
+    display: block;
+}

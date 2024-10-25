@@ -59,10 +59,11 @@ def set_csp(response):
         g.nonce = generate_nonce()
 
     csp = (
-        #"default-src 'self' https://maxcdn.bootstrapcdn.com;"
-        #f"script-src 'self' https://cdn.jsdelivr.net 'nonce-{g.nonce}';"
-        #"style-src 'self' https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css;"
+        "default-src 'self' https://maxcdn.bootstrapcdn.com;"
+        f"script-src https://cdn.jsdelivr.net 'nonce-{g.nonce}';"
+        "style-src 'self' https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css 'unsafe-inline';"
         "frame-ancestors 'none';"
+        "form-action 'self';"
     )
 
     response.headers['Content-Security-Policy'] = csp
@@ -82,30 +83,54 @@ def index():
     """
     index_form = IndexForm()
     login_form = index_form.login
-    register_form = index_form.register
+    register_form = index_form.register    
 
-    # input validation, only allow alphanumeric characters
     if login_form.is_submitted() and login_form.submit.data:
-        username_input = login_form.username.data
-        password_input = login_form.password.data
         
+        # input validation for login
+        username_input = login_form.username.data
         if not username_input.isalnum():   # Method to check if alphanumberical, to prevent SQLI
             flash("Only alphanumeric characters are allowed", category="warning")
             return render_template("index.html.j2", title="Welcome", form=index_form)
+        
+        get_user = f"""
+             SELECT *
+             FROM Users
+             WHERE username = '{login_form.username.data}';
+             """
+        user = sqlite.query(get_user, one=True)
 
-    if register_form.is_submitted() and register_form.submit.data:
+        if user is None: # Check that user exists, before checking password
+            flash("Wrong password or username", "warning")
+            return render_template("index.html.j2", title="Welcome", form=index_form)
+
+        if check_password_hash(user["password"], login_form.password.data):
+            return redirect(url_for("stream", username=login_form.username.data))
+        else:
+            flash("Wrong password or username", "warning")
+
+
+    elif register_form.is_submitted() and register_form.submit.data:
+        
         reg_username = register_form.username.data
         reg_first_name = register_form.first_name.data
         reg_last_name = register_form.last_name.data
         reg_password = register_form.password.data
         confirm_password_input = register_form.confirm_password.data
 
+        # input validation for registration
+        bad_password_chars = ["'", '"', ";", "--", "/*", "*/"] # to prevent SQLI
+        for char in bad_password_chars:
+            if char in reg_password:
+                flash("Invalid password", category="warning")
+                return render_template("index.html.j2", title="Welcome", form=index_form)
+        
         # make sure passwords match
         if confirm_password_input != reg_password:
             flash("Passwords do not match", category="warning")
             return render_template("index.html.j2", title="Welcome", form=index_form)
         
-        # input validation, only allow alphanumeric characters
+        # only allow alphanumeric characters for username, first name and last name
         if not reg_username.isalnum() or not reg_first_name.isalnum() or not reg_last_name.isalnum():   # Method to check if alphanumberical, to prevent SQLI
             flash("Only alphanumeric characters are allowed", category="warning")
             return render_template("index.html.j2", title="Welcome", form=index_form)
@@ -121,35 +146,7 @@ def index():
             flash("Username not available", category="warning")
             return render_template("index.html.j2", title="Welcome", form=index_form)
 
-
-    if login_form.is_submitted() and login_form.submit.data:
-        get_user = f"""
-             SELECT *
-             FROM Users
-             WHERE username = '{login_form.username.data}';
-             """
-        user = sqlite.query(get_user, one=True)
-
-        if user is None: # Check that user exists, before checking password
-            flash("Wrong password or username", "warning")
-            return render_template("index.html.j2", title="Welcome", form=index_form)
-
-        password = user["password"]
-
-        
-        checking_password = login_form.password.data
-
-
-        if check_password_hash(password, checking_password):
-            return redirect(url_for("stream", username=login_form.username.data))
-        else:
-            flash("Wrong password or username", "warning")
-
-
-    elif register_form.is_submitted() and register_form.submit.data:
-
-        new_password = register_form.password.data
-        password_hash = generate_password_hash(new_password)
+        password_hash = generate_password_hash(reg_password)
 
         insert_user = f"""
             INSERT INTO Users (username, first_name, last_name, password)
@@ -426,7 +423,6 @@ def profile(username: str):
         return redirect(url_for("profile", username=username))
     # print("setting html nonce: ", g.nonce)
     g.nonce = generate_nonce()
-    print("nonce in template: ", g.nonce)
     return render_template("profile.html.j2", title="Profile", username=username, user=user, form=profile_form, nonce=g.nonce)
 
 
