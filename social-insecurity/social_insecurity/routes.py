@@ -226,7 +226,7 @@ def stream(username: str):
     for post in posts:
         if post[3]:
             name = post[3].split(".")
-            if len(name) != 2 or name[-1].lower() nota in valid_check:
+            if len(name) != 2 or name[-1].lower() not in valid_check:
                 posts.remove(post)
     return render_template("stream.html.j2", title="Stream", username=username, form=post_form, posts=posts)
 
