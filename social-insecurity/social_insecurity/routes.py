@@ -118,6 +118,7 @@ def index():
         reg_password = register_form.password.data
         confirm_password_input = register_form.confirm_password.data
 
+        # Password requirements
         if len(reg_password) < 8:
             flash("Password must be at least 8 characters long", category="warning")
             return render_template("index.html.j2", title="Welcome", form=index_form)
