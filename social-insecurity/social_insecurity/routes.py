@@ -118,6 +118,26 @@ def index():
         reg_password = register_form.password.data
         confirm_password_input = register_form.confirm_password.data
 
+        if len(reg_password) < 8:
+            flash("Password must be at least 8 characters long", category="warning")
+            return render_template("index.html.j2", title="Welcome", form=index_form)
+        
+        if not any(char.isdigit() for char in reg_password):
+            flash("Password must contain at least one digit", category="warning")
+            return render_template("index.html.j2", title="Welcome", form=index_form)
+        
+        if not any(char.islower() for char in reg_password):
+            flash("Password must contain at least one lowercase letter", category="warning")
+            return render_template("index.html.j2", title="Welcome", form=index_form)
+        
+        if not any(char.isupper() for char in reg_password):
+            flash("Password must contain at least one uppercase letter", category="warning")
+            return render_template("index.html.j2", title="Welcome", form=index_form)
+        
+        if not any(char in "@!#$%^&+=" for char in reg_password):
+            flash("Password must contain at least one special character (@!#$%^&+=)", category="warning")
+            return render_template("index.html.j2", title="Welcome", form=index_form)
+
         # input validation for registration
         bad_password_chars = ["'", '"', ";", "--", "/*", "*/"] # to prevent SQLI
         for char in bad_password_chars:
