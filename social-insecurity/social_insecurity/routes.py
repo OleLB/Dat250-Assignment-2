@@ -10,7 +10,7 @@ from pathlib import Path
 
 from flask import current_app as app
 
-from flask import flash, redirect, render_template, send_from_directory, url_for, g
+from flask import flash, redirect, render_template, send_from_directory, url_for, g, request
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
@@ -18,8 +18,41 @@ from social_insecurity import sqlite
 from social_insecurity.forms import CommentsForm, FriendsForm, IndexForm, PostForm, ProfileForm
 from werkzeug.security import generate_password_hash, check_password_hash
 
+from flask_login import login_user, UserMixin, login_required, current_user, LoginManager
+
+login_manager = LoginManager()
+login_manager.init_app(app)
 
 limiter = Limiter(get_remote_address, app=app, default_limits=["1000 per day"])
+
+# Define the User model
+class User(UserMixin):          #! This needs to be updated with eveything we need to do with the user data
+    def __init__(self, id, username):
+        self.id = id
+        self.username = username
+
+    @staticmethod
+    def get(user_id):
+        # Replace this with your own logic to retrieve a user from the database by ID
+        # For example:
+        # user = User.query.get(user_id)
+        return User(user_id, "example_username")  # Temporary example; replace with actual user lookup
+
+
+
+# Register the user_loader function with the login_manager
+@login_manager.user_loader
+def load_user(user_id):
+    get_user = f"""
+             SELECT *
+             FROM Users
+             WHERE id = '{user_id}';
+             """
+    db_user = sqlite.query(get_user, one=True)
+    if db_user:
+        return User(id=db_user["id"], username=db_user["username"])
+    return None
+
 
 
 def verify_username(username):
@@ -98,14 +131,17 @@ def index():
              FROM Users
              WHERE username = '{login_form.username.data}';
              """
-        user = sqlite.query(get_user, one=True)
+        db_user = sqlite.query(get_user, one=True)
 
-        if user is None: # Check that user exists, before checking password
+        if db_user is None: # Check that user exists, before checking password
             flash("Wrong password or username", "warning")
             return render_template("index.html.j2", title="Welcome", form=index_form)
+        
 
-        if check_password_hash(user["password"], login_form.password.data):
-            return redirect(url_for("stream", username=login_form.username.data))
+        if check_password_hash(db_user["password"], login_form.password.data):
+            UserObject = User(db_user["id"], db_user["username"])   # Create a User object
+            login_user(UserObject) # Log in the user
+            return redirect(url_for("stream", username=db_user["username"])) # Redirect to the stream page
         else:
             flash("Wrong password or username", "warning")
 
@@ -179,8 +215,8 @@ def index():
 
     return render_template("index.html.j2", title="Welcome", form=index_form)
 
-
 @app.route("/stream/<string:username>", methods=["GET", "POST"])
+@login_required
 def stream(username: str):
     """Provides the stream page for the application.
 
@@ -189,6 +225,12 @@ def stream(username: str):
     Otherwise, it reads the username from the URL and displays all posts from the user and their friends.
     """
 
+    if current_user.username != username:
+        return render_template("index.html.j2", title="Welcome", form=IndexForm())
+
+    #print("current user: ", current_user.username)
+    # if current_user.username != username:
+    #     return render_template("index.html.j2", title="Welcome", form=IndexForm())
     
     # Check if the username is alphanumerical and exists
     if not verify_username(username):
@@ -250,6 +292,7 @@ def stream(username: str):
 
 
 @app.route("/comments/<string:username>/<int:post_id>", methods=["GET", "POST"])
+@login_required
 def comments(username: str, post_id: int):
     """Provides the comments page for the application.
 
@@ -257,6 +300,9 @@ def comments(username: str, post_id: int):
 
     Otherwise, it reads the username and post id from the URL and displays all comments for the post.
     """
+
+    if current_user.username != username:
+        return render_template("index.html.j2", title="Welcome", form=IndexForm())
 
     # Check if the username is alphanumerical and exists
     if not verify_username(username):
@@ -317,6 +363,7 @@ def comments(username: str, post_id: int):
 
 
 @app.route("/friends/<string:username>", methods=["GET", "POST"])
+@login_required
 def friends(username: str):
     """Provides the friends page for the application.
 
@@ -324,6 +371,9 @@ def friends(username: str):
 
     Otherwise, it reads the username from the URL and displays all friends of the user.
     """
+
+    if current_user.username != username:
+        return render_template("index.html.j2", title="Welcome", form=IndexForm())
 
     # Check if the username is alphanumerical and exists
     if not verify_username(username):
@@ -381,6 +431,7 @@ def friends(username: str):
 
 
 @app.route("/profile/<string:username>", methods=["GET", "POST"])
+@login_required
 def profile(username: str):
     """Provides the profile page for the application.
 
@@ -388,6 +439,9 @@ def profile(username: str):
 
     Otherwise, it reads the username from the URL and displays the user's profile.
     """
+
+    if current_user.username != username:
+        return render_template("index.html.j2", title="Welcome", form=IndexForm())
 
     # Check if the username is alphanumerical and exists
     if not verify_username(username):

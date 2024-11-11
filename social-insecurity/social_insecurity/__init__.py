@@ -12,14 +12,14 @@ from flask import Flask, current_app
 from social_insecurity.config import Config
 from social_insecurity.database import SQLite3
 
-# from flask_login import LoginManager
+from flask_login import LoginManager, UserMixin, login_user, login_required, current_user
+
 # from flask_bcrypt import Bcrypt
 from flask_wtf.csrf import CSRFProtect
-# from flask_cors import CORS
 
 sqlite = SQLite3()
 # TODO: Handle login management better, maybe with flask_login?
-# login = LoginManager()
+login_manager = LoginManager()
 csrf = CSRFProtect()
 
 
@@ -31,10 +31,10 @@ def create_app(test_config=None) -> Flask:
         app.config.from_object(test_config)
 
     sqlite.init_app(app, schema="schema.sql")
-    # CORS(app)
-    # login.init_app(app)
+    # login_manager.init_app(app)
     # bcrypt.init_app(app)
     csrf.init_app(app)
+    app.secret_key = "SECRET_KEY"
 
     
 
@@ -52,6 +52,7 @@ def create_app(test_config=None) -> Flask:
         import social_insecurity.routes  # noqa: E402,F401
 
     return app
+
 
 
 def create_uploads_folder(app: Flask) -> None:
